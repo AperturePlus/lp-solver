@@ -1,0 +1,4 @@
+# Project dependencies will be listed here
+# Example: PyQt5
+numpy
+PyQt5 
