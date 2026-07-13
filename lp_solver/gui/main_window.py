@@ -315,16 +315,34 @@ class MainWindow(QMainWindow):
             solution = solve_lp_problem(problem_input)
 
             self.results_output.clear()
-            self.results_output.append(f"Status: {solution.status}")
+            if solution.status == "optimal":
+                if solution.has_multiple_optima:
+                    status_line = "状态: 最优解 (存在多重最优解)"
+                else:
+                    status_line = "状态: 最优解 (唯一最优解)"
+            elif solution.status == "infeasible":
+                status_line = "状态: 无可行解"
+            elif solution.status == "unbounded":
+                status_line = "状态: 无界解"
+            else:  # "error"
+                status_line = "状态: 求解失败"
+            self.results_output.append(status_line)
             if solution.objective_value is not None:
-                self.results_output.append(f"Objective Value: {solution.objective_value:.4f}")
+                self.results_output.append(f"目标函数值: {solution.objective_value:.4f}")
             if solution.solution_variables is not None:
-                formatted_vars = [f"x{idx+1}={var:.4f}" for idx, var in enumerate(solution.solution_variables)]
-                self.results_output.append(f"Solution Variables: {', '.join(formatted_vars)}")
-            else: # e.g. for unbounded or infeasible if variables are not set
-                self.results_output.append(f"Solution Variables: Not applicable")
+                names = list(self.custom_var_names)
+                # pad/trim to solution length defensively
+                while len(names) < len(solution.solution_variables):
+                    names.append(f"x{len(names)+1}")
+                formatted_vars = [
+                    f"{names[idx]}={var:.4f}"
+                    for idx, var in enumerate(solution.solution_variables)
+                ]
+                self.results_output.append(f"决策变量: {', '.join(formatted_vars)}")
+            else:
+                self.results_output.append("决策变量: 不适用")
             if solution.message:
-                self.results_output.append(f"Message: {solution.message}")
+                self.results_output.append(f"信息: {solution.message}")
 
         except ValueError as e:
             QMessageBox.critical(self, "Input Error", f"Invalid numeric input. Please check all numbers: {e}")
