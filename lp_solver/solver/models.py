@@ -22,4 +22,5 @@ class LPSolution:
     status: str  # solution status: "optimal", "unbounded", "infeasible", "error"
     solution_variables: Optional[List[float]] = None  # optimal solution values of variables
     objective_value: Optional[float] = None  # optimal value of the objective function
+    has_multiple_optima: Optional[bool] = None  # True/False when status=="optimal", else None
     message: str = ""  # additional information, such as error messages or solution explanations 
