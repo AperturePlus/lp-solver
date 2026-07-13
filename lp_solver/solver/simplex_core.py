@@ -149,3 +149,62 @@ def pivot(state: "TableauState", pivot_row: int, pivot_col: int, cost_row_idx: i
         if factor != 0.0:
             state.tableau[i, :] -= factor * state.tableau[pivot_row, :]
     state.basis[pivot_row - CONSTRAINTS_START_ROW] = pivot_col
+
+
+def _drive_cost_to_canonical(state: "TableauState", cost_row_idx: int) -> None:
+    """Subtract basic-var rows with nonzero cost from the cost row (reduced-cost setup)."""
+    num_constraints = len(state.basis)
+    for i in range(num_constraints):
+        row = CONSTRAINTS_START_ROW + i
+        basic_col = state.basis[i]
+        coeff = state.tableau[cost_row_idx, basic_col]
+        if abs(coeff) > TOL:
+            state.tableau[cost_row_idx, :] -= coeff * state.tableau[row, :]
+
+
+def run_simplex(state: "TableauState", cost_row_idx: int, banned_cols: set) -> str:
+    """Run simplex to optimality on the given cost row. Returns 'optimal', 'unbounded_direction', or 'max_iterations'."""
+    _drive_cost_to_canonical(state, cost_row_idx)
+    num_constraints = len(state.basis)
+    total_vars = state.tableau.shape[1] - 1
+    max_iter = max(1000, 50 * (state.num_orig_vars + num_constraints))
+    for _ in range(max_iter):
+        entering = select_entering(state, cost_row_idx, banned_cols)
+        if entering is None:
+            return "optimal"
+        leaving = ratio_test(state, pivot_col=entering)
+        if leaving is None:
+            return "unbounded_direction"
+        pivot(state, pivot_row=leaving, pivot_col=entering, cost_row_idx=cost_row_idx)
+    return "max_iterations"
+
+
+def _artificial_value_sum(state: "TableauState") -> float:
+    """Sum of artificial variables currently in the basis."""
+    total = 0.0
+    for i in range(len(state.basis)):
+        if state.basis[i] in state.artificial_cols:
+            total += state.tableau[CONSTRAINTS_START_ROW + i, state.rhs_col]
+    return total
+
+
+def extract_solution(state: "TableauState", cost_row_idx: int, is_maximize: bool):
+    """Return (solution_vars, objective_value, has_multiple_optima)."""
+    sol = np.zeros(state.num_orig_vars)
+    for i in range(len(state.basis)):
+        col = state.basis[i]
+        if col < state.num_orig_vars:
+            sol[col] = state.tableau[CONSTRAINTS_START_ROW + i, state.rhs_col]
+    obj_val = -state.tableau[cost_row_idx, state.rhs_col]
+    if is_maximize:
+        obj_val = -obj_val
+    # Multiple optima: a NON-BASIC ORIGINAL variable with ~0 reduced cost.
+    has_multiple = False
+    basic_set = set(state.basis)
+    for j in range(state.num_orig_vars):
+        if j in basic_set:
+            continue
+        if abs(state.tableau[cost_row_idx, j]) < TOL:
+            has_multiple = True
+            break
+    return sol, obj_val, has_multiple

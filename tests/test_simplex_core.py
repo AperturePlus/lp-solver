@@ -145,3 +145,66 @@ def test_pivot_normalizes_and_updates_basis():
     assert state.tableau[0, 0] == pytest.approx(0.0)
     # basis updated: row 2 now has column 0
     assert state.basis[0] == 0
+
+
+from lp_solver.solver.simplex_core import run_simplex, extract_solution
+
+
+def test_run_simplex_optimal_le_problem():
+    # min -x1 s.t. x1 <= 10  ->  optimal at x1=10, obj=-10
+    state = _le_state()
+    result = run_simplex(state, cost_row_idx=0, banned_cols=set())
+    assert result == "optimal"
+    sol, obj, multiple = extract_solution(state, cost_row_idx=0, is_maximize=True)
+    assert sol[0] == pytest.approx(10.0)
+    assert obj == pytest.approx(10.0)  # re-negated for maximize
+    assert multiple is False
+
+
+def test_run_simplex_returns_unbounded_direction():
+    # min -x1 with no upper bound on x1 -> unbounded
+    problem = LPProblemInput(
+        objective_coefficients=[1.0],
+        objective_sense="maximize",
+        constraint_matrix=[[1.0]],
+        constraint_senses=[">="],
+        constraint_rhs=[0.0],
+    )
+    state, _ = build_standard_form(problem, is_maximize=True)
+    # Phase II cost = [-1, ...]; x1 can grow unbounded
+    result = run_simplex(state, cost_row_idx=0, banned_cols=state.artificial_cols)
+    assert result == "unbounded_direction"
+
+
+def test_extract_solution_multiple_optima_only_over_orig_vars():
+    # max x1+x2 s.t. x1<=4, x2<=3 -> unique optimum obj=7 at (4,3).
+    # Both slacks are non-basic with zero reduced cost but must NOT trigger multiple.
+    # (No free original variables: both vars have nonzero objective AND nonzero A columns.)
+    problem = LPProblemInput(
+        objective_coefficients=[1.0, 1.0],
+        objective_sense="maximize",
+        constraint_matrix=[[1.0, 0.0], [0.0, 1.0]],
+        constraint_senses=["<=", "<="],
+        constraint_rhs=[4.0, 3.0],
+    )
+    state, _ = build_standard_form(problem, is_maximize=True)
+    run_simplex(state, cost_row_idx=0, banned_cols=set())
+    sol, obj, multiple = extract_solution(state, cost_row_idx=0, is_maximize=True)
+    assert obj == pytest.approx(7.0)
+    assert multiple is False  # regression: old code reported True on zero-reduced-cost slacks
+
+
+def test_extract_solution_detects_true_multiple_optima():
+    # max x1+x2 s.t. x1+x2<=4 -> multiple optima along the edge
+    problem = LPProblemInput(
+        objective_coefficients=[1.0, 1.0],
+        objective_sense="maximize",
+        constraint_matrix=[[1.0, 1.0]],
+        constraint_senses=["<="],
+        constraint_rhs=[4.0],
+    )
+    state, _ = build_standard_form(problem, is_maximize=True)
+    run_simplex(state, cost_row_idx=0, banned_cols=set())
+    sol, obj, multiple = extract_solution(state, cost_row_idx=0, is_maximize=True)
+    assert obj == pytest.approx(4.0)
+    assert multiple is True
