@@ -103,3 +103,49 @@ def build_standard_form(problem: LPProblemInput, is_maximize: bool) -> Tuple["Ta
         rhs_col=rhs_col,
     )
     return state, len(artificial_cols) > 0
+
+
+from typing import Optional
+
+
+def select_entering(state: "TableauState", cost_row_idx: int, banned_cols: set) -> Optional[int]:
+    """Bland's rule: return lowest-index column with reduced cost < -TOL, not banned."""
+    total_vars = state.tableau.shape[1] - 1  # exclude RHS column
+    for j in range(total_vars):
+        if j in banned_cols:
+            continue
+        if state.tableau[cost_row_idx, j] < -TOL:
+            return j
+    return None
+
+
+def ratio_test(state: "TableauState", pivot_col: int) -> Optional[int]:
+    """Minimum-ratio test with Bland tie-break (lowest row index). Returns tableau row index or None."""
+    min_ratio = float("inf")
+    pivot_row = None
+    num_constraints = len(state.basis)
+    for i in range(num_constraints):
+        row = CONSTRAINTS_START_ROW + i
+        coeff = state.tableau[row, pivot_col]
+        if coeff > TOL:
+            ratio = state.tableau[row, state.rhs_col] / coeff
+            if ratio < min_ratio - TOL:
+                min_ratio = ratio
+                pivot_row = row
+            # Bland tie-break: on a tie (within TOL) keep the FIRST (lowest index) row,
+            # which is already the behavior since we only update on strict improvement.
+    return pivot_row
+
+
+def pivot(state: "TableauState", pivot_row: int, pivot_col: int, cost_row_idx: int) -> None:
+    """In-place pivot: normalize pivot row, eliminate pivot col from all other rows, update basis."""
+    pivot_element = state.tableau[pivot_row, pivot_col]
+    state.tableau[pivot_row, :] /= pivot_element
+    num_rows = state.tableau.shape[0]
+    for i in range(num_rows):
+        if i == pivot_row:
+            continue
+        factor = state.tableau[i, pivot_col]
+        if factor != 0.0:
+            state.tableau[i, :] -= factor * state.tableau[pivot_row, :]
+    state.basis[pivot_row - CONSTRAINTS_START_ROW] = pivot_col
