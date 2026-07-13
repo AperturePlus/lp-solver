@@ -10,10 +10,8 @@ from .models import LPProblemInput
 TOL = 1e-9
 
 # Tableau row indices. Row 0 holds the cost row used by run_simplex (Phase I or II).
-# Row 1 is reserved as a second cost slot so Phase II can reuse the tableau without
-# rebuilding; constraint rows start at row 2.
+# Constraint rows start at row 2.
 COST_ROW = 0
-RESERVED_COST_ROW = 1
 CONSTRAINTS_START_ROW = 2
 
 
@@ -177,15 +175,6 @@ def run_simplex(state: "TableauState", cost_row_idx: int, banned_cols: set) -> s
             return "unbounded_direction"
         pivot(state, pivot_row=leaving, pivot_col=entering, cost_row_idx=cost_row_idx)
     return "max_iterations"
-
-
-def _artificial_value_sum(state: "TableauState") -> float:
-    """Sum of artificial variables currently in the basis."""
-    total = 0.0
-    for i in range(len(state.basis)):
-        if state.basis[i] in state.artificial_cols:
-            total += state.tableau[CONSTRAINTS_START_ROW + i, state.rhs_col]
-    return total
 
 
 def extract_solution(state: "TableauState", cost_row_idx: int, is_maximize: bool):
