@@ -1,6 +1,9 @@
 [project]
 name = "lpq"
 version = "0.1.0"
-description = "Add your description here"
+description = "A linear programming question solver developed for operational research lesson"
 requires-python = ">=3.13"
 dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
